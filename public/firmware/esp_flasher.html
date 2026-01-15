@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="icon-star.png" type="image/x-icon">
+    <title>ESP32在线刷固件工具</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #ffffff 0%, #eeeeee 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+        
+        .content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            padding: 30px;
+        }
+        
+        .section {
+            background: #f8f9fa;
+            padding: 25px;
+            border-radius: 10px;
+            border: 2px solid #e9ecef;
+        }
+        
+        .section h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 24px;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 10px;
+        }
+        
+        .form-group {
+            margin-bottom: 10px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #495057;
+            font-weight: 600;
+        }
+        
+        input[type="file"],
+        input[type="url"],
+        input[type="text"],
+        select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        
+        input[type="file"]:focus,
+        input[type="url"]:focus,
+        input[type="text"]:focus,
+        select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        button {
+            width: 100%;
+            padding: 14px;
+            font-size: 14px;
+            font-weight: 600;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-top: 10px;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+        
+        .btn-secondary:hover:not(:disabled) {
+            background: #5a6268;
+        }
+        
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+        
+        .btn-danger:hover:not(:disabled) {
+            background: #c82333;
+        }
+        
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        .status {
+            padding: 12px;
+            border-radius: 8px;
+            margin-top: 15px;
+            font-weight: 500;
+        }
+        
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .progress {
+            width: 100%;
+            height: 30px;
+            background: #e9ecef;
+            border-radius: 15px;
+            overflow: hidden;
+            margin-top: 15px;
+            display: none;
+        }
+        
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            width: 0%;
+            transition: width 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+        }
+        
+        #terminal {
+            background: #1e1e1e;
+            color: #00ff00;
+            padding: 15px;
+            border-radius: 8px;
+            height: 450px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+                margin-top: 10px;
+        }
+        
+        #terminal::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        #terminal::-webkit-scrollbar-track {
+            background: #2d2d2d;
+        }
+        
+        #terminal::-webkit-scrollbar-thumb {
+            background: #667eea;
+            border-radius: 4px;
+        }
+        
+        .log-entry {
+            margin-bottom: 2px;
+        }
+        
+        .log-timestamp {
+            color: #888;
+            margin-right: 10px;
+        }
+        
+        .btn-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        @media (max-width: 768px) {
+            .content {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔧 ESP32在线刷固件工具</h1>
+            <p>支持固件上传和串口日志监控</p>
+        </div>
+        
+        <div class="content">
+            <!-- 固件刷写部分 -->
+            <div class="section">
+                <h2>📤 固件刷写</h2>
+                
+                <div class="form-group">
+                    <label>选择固件来源：</label>
+                    <select id="firmwareSource" onchange="toggleFirmwareInput()">
+                        <option value="preset">预设固件</option>
+                        <option value="upload">本地上传</option>
+                    </select>
+                </div>
+                
+                <div class="form-group" id="uploadGroup" style="display:none;">
+                    <label>选择固件文件（.bin）：</label>
+                    <input type="file" id="firmwareFile" accept=".bin">
+                </div>
+                
+                <div class="form-group" id="urlGroup" style="display:none;">
+                    <label>固件URL地址：</label>
+                    <input type="url" id="firmwareUrl" placeholder="https://example.com/firmware.bin">
+                </div>
+                
+                <div class="form-group" id="presetGroup">
+                    <label>选择预设固件：</label>
+                    <select id="presetFirmware">
+                        <option value="">-- 选择固件 --</option>
+                        <option value="./firmware/ESP32C3-AirM2M-Z96-Poe-V20260103.bin">1号 ESP32C3 AirM2M ESP32C3-E029A01 2.9寸墨水屏 测试用固件</option>
+                        <option value="https://dev.gizfly.com/test2.bin">2号 ESP32C3 AirM2M ESP32C3-E029A01 2.9寸墨水屏 股票 固件</option>
+                        <option value="https://dev.gizfly.com/ESP32C3-AirM2M-ESP32C3-Z96-Stock-V20251231.bin">3号 ESP32C3 AirM2M 4.2寸墨水屏 股票 固件</option>
+                        <option value="https://dev.gizfly.com/ESP32C3-AirM2M-ESP32C3-Z96-Stock-V20260111.bin">4号 ESP32C3 AirM2M 4.2寸墨水屏 股票 固件</option>                        
+                        <option value="https://dev.gizfly.com/ESP32C3-AirM2M-Z96-Poe-V20260103.bin">9号 ESP32C3 AirM2M 4.2寸墨水屏 诗词 固件</option>
+                        
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label>刷写地址（十六进制）：</label>
+                    <input type="text" id="flashOffset" value="0" placeholder="0">
+                </div>
+                
+                <div class="btn-group">
+                    <button class="btn-primary" id="connectBtn" onclick="connectDevice()">
+                        🔌 连接设备
+                    </button>
+                    
+                    <button class="btn-primary" id="flashBtn" onclick="flashFirmware()" disabled>
+                        ⚡ 开写固件
+                    </button>
+                    
+                    <button class="btn-danger" id="eraseBtn" onclick="eraseFlash()" disabled>
+                        🗑️ 擦除Flash
+                    </button>
+                    
+                    <button class="btn-danger" id="disconnectBtn" onclick="disconnectDevice()" disabled>
+                        🔌 断开连接
+                    </button>
+                </div>
+                <div class="progress" id="progressBar">
+                    <div class="progress-bar" id="progressBarInner">0%</div>
+                </div>
+                
+                <div id="flashStatus"></div>
+            </div>
+            
+            <!-- 串口日志部分 -->
+            <div class="section">
+                <h2>📊 ESP32串口日志</h2>
+                
+                <div class="form-group">
+                    <label>波特率：</label>
+                    <select id="baudRate">
+                        <option value="9600">9600</option>
+                        <option value="115200" selected>115200</option>
+                        <option value="230400">230400</option>
+                        <option value="460800">460800</option>
+                        <option value="921600">921600</option>
+                    </select>
+                </div>
+                
+                <div class="btn-group">
+                    <button class="btn-secondary" id="startLogBtn" onclick="startLogging()" disabled>
+                        ▶️ 开始监控日志
+                    </button>
+                    
+                    <button class="btn-secondary" id="stopLogBtn" onclick="stopLogging()" disabled>
+                        ⏸️ 停止监控
+                    </button>
+                    
+                    <button class="btn-secondary" onclick="clearLog()">
+                        🗑️ 清空日志
+                    </button>
+                </div>
+                <div id="terminal"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <script type="module">
+        import { ESPLoader, Transport } from 'https://unpkg.com/esptool-js@0.4.5/bundle.js';
+        
+        let device = null;
+        let transport = null;
+        let chip = null;
+        let esploader = null;
+        let isConnected = false;
+        let isLogging = false;
+        let logReader = null;
+        
+        // Terminal 对象
+        const term = {
+            logs: [],
+            clean() {
+                this.logs = [];
+                this.updateTerminal();
+            },
+            writeLine(data) {
+                this.logs.push(data);
+                this.updateTerminal();
+            },
+            write(data) {
+                if (this.logs.length > 0) {
+                    this.logs[this.logs.length - 1] += data;
+                } else {
+                    this.logs.push(data);
+                }
+                this.updateTerminal();
+            },
+            updateTerminal() {
+                const terminal = document.getElementById('terminal');
+                terminal.innerHTML = this.logs.map(log => 
+                    `<div class="log-entry">${this.escapeHtml(log)}</div>`
+                ).join('');
+                terminal.scrollTop = terminal.scrollHeight;
+            },
+            escapeHtml(text) {
+                const div = document.createElement('div');
+                div.textContent = text;
+                return div.innerHTML;
+            }
+        };
+        
+        window.toggleFirmwareInput = function() {
+            const source = document.getElementById('firmwareSource').value;
+            document.getElementById('uploadGroup').style.display = source === 'upload' ? 'block' : 'none';
+            document.getElementById('urlGroup').style.display = source === 'url' ? 'block' : 'none';
+            document.getElementById('presetGroup').style.display = source === 'preset' ? 'block' : 'none';
+        }
+        
+        function showStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('flashStatus');
+            statusDiv.className = `status ${type}`;
+            statusDiv.textContent = message;
+            statusDiv.style.display = 'block';
+        }
+        
+        function updateProgress(percent) {
+            const progressBar = document.getElementById('progressBar');
+            const progressBarInner = document.getElementById('progressBarInner');
+            progressBar.style.display = 'block';
+            progressBarInner.style.width = percent + '%';
+            progressBarInner.textContent = Math.round(percent) + '%';
+        }
+        
+        window.connectDevice = async function() {
+            try {
+                if (!navigator.serial) {
+                    showStatus('您的浏览器不支持Web Serial API，请使用Chrome、Edge或Opera浏览器', 'error');
+                    return;
+                }
+                
+                if (isConnected) {
+                    showStatus('设备已连接', 'info');
+                    return;
+                }
+                
+                showStatus('正在选择设备...', 'info');
+                
+                // 选择串口设备
+                device = await navigator.serial.requestPort();
+                
+                showStatus('正在连接设备...', 'info');
+                
+                // 创建传输层
+                transport = new Transport(device, true);
+                
+                // 创建 ESPLoader
+                esploader = new ESPLoader({
+                    transport: transport,
+                    baudrate: 115200,
+                    terminal: term
+                });
+                
+                showStatus('正在识别芯片...', 'info');
+                
+                // 连接并识别芯片
+                chip = await esploader.main();
+                
+                isConnected = true;
+                
+                showStatus(`✅ 连接成功！芯片型号: ${chip}`, 'success');
+                
+                // 更新按钮状态
+                document.getElementById('connectBtn').disabled = true;
+                document.getElementById('flashBtn').disabled = false;
+                document.getElementById('eraseBtn').disabled = false;
+                document.getElementById('disconnectBtn').disabled = false;
+                document.getElementById('startLogBtn').disabled = false;
+                
+            } catch (error) {
+                isConnected = false;
+                if (error.message && error.message.includes('No port selected')) {
+                    showStatus('未选择端口', 'info');
+                } else {
+                    showStatus('连接失败: ' + error.message, 'error');
+                    term.writeLine('连接错误: ' + error.message);
+                }
+                console.error('连接错误:', error);
+            }
+        }
+        
+        async function getFirmwareData() {
+            const source = document.getElementById('firmwareSource').value;
+            let contents;
+            
+            if (source === 'upload') {
+                const file = document.getElementById('firmwareFile').files[0];
+                if (!file) {
+                    throw new Error('请选择固件文件');
+                }
+                contents = await file.arrayBuffer();
+            } else if (source === 'url') {
+                const url = document.getElementById('firmwareUrl').value;
+                if (!url) {
+                    throw new Error('请输入固件URL');
+                }
+                const response = await fetch(url);
+                if (!response.ok) throw new Error('下载固件失败');
+                contents = await response.arrayBuffer();
+            } else if (source === 'preset') {
+                const url = document.getElementById('presetFirmware').value;
+                if (!url) {
+                    throw new Error('请选择预设固件');
+                }
+                const response = await fetch(url);
+                if (!response.ok) throw new Error('下载固件失败');
+                contents = await response.arrayBuffer();
+            }
+            
+            // 转换为字符串格式（esptool-js期望的格式）
+            const bytes = new Uint8Array(contents);
+            let binaryString = '';
+            for (let i = 0; i < bytes.length; i++) {
+                binaryString += String.fromCharCode(bytes[i]);
+            }
+            return binaryString;
+        }
+        
+        window.flashFirmware = async function() {
+            if (!isConnected || !esploader) {
+                showStatus('请先连接设备', 'error');
+                return;
+            }
+            
+            try {
+                showStatus('正在准备固件...', 'info');
+                document.getElementById('flashBtn').disabled = true;
+                document.getElementById('eraseBtn').disabled = true;
+                
+                const firmwareData = await getFirmwareData();
+                const offset = parseInt(document.getElementById('flashOffset').value, 16);
+                
+                showStatus('正在刷写固件...', 'info');
+                updateProgress(0);
+                
+                // firmwareData 现在是字符串格式
+                const fileArray = [{
+                    data: firmwareData, 
+                    address: offset
+                }];
+                
+                await esploader.writeFlash({
+                    fileArray: fileArray,
+                    flashSize: "keep",
+                    eraseAll: false,
+                    compress: true,
+                    reportProgress: (fileIndex, written, total) => {
+                        const percent = (written / total) * 100;
+                        updateProgress(percent);
+                    }
+                });
+                
+                updateProgress(100);
+                showStatus('✅ 固件刷写成功！', 'success');
+                term.writeLine('✅ 固件刷写完成');
+                
+            } catch (error) {
+                showStatus('刷写失败: ' + error.message, 'error');
+                term.writeLine('刷写错误: ' + error.message);
+                console.error('刷写错误:', error);
+            } finally {
+                document.getElementById('flashBtn').disabled = false;
+                document.getElementById('eraseBtn').disabled = false;
+            }
+        }
+        
+        window.eraseFlash = async function() {
+            if (!isConnected || !esploader) {
+                showStatus('请先连接设备', 'error');
+                return;
+            }
+            
+            if (!confirm('确定要擦除整个Flash吗？此操作不可恢复！')) {
+                return;
+            }
+            
+            try {
+                showStatus('正在擦除Flash...', 'info');
+                document.getElementById('eraseBtn').disabled = true;
+                document.getElementById('flashBtn').disabled = true;
+                
+                await esploader.eraseFlash();
+                
+                showStatus('✅ Flash擦除成功！', 'success');
+                term.writeLine('✅ Flash擦除完成');
+                
+            } catch (error) {
+                showStatus('擦除失败: ' + error.message, 'error');
+                term.writeLine('擦除错误: ' + error.message);
+                console.error('擦除错误:', error);
+            } finally {
+                document.getElementById('eraseBtn').disabled = false;
+                document.getElementById('flashBtn').disabled = false;
+            }
+        }
+        
+        window.disconnectDevice = async function() {
+            try {
+                if (isLogging) {
+                    await window.stopLogging();
+                }
+                
+                if (transport) {
+                    await transport.disconnect();
+                    await transport.waitForUnlock(1500);
+                }
+                
+                device = null;
+                transport = null;
+                chip = null;
+                esploader = null;
+                isConnected = false;
+                
+                showStatus('设备已断开连接', 'info');
+                term.writeLine('设备已断开');
+                
+                document.getElementById('connectBtn').disabled = false;
+                document.getElementById('flashBtn').disabled = true;
+                document.getElementById('eraseBtn').disabled = true;
+                document.getElementById('disconnectBtn').disabled = true;
+                document.getElementById('startLogBtn').disabled = true;
+                document.getElementById('progressBar').style.display = 'none';
+                
+            } catch (error) {
+                showStatus('断开连接失败: ' + error.message, 'error');
+                console.error('断开错误:', error);
+            }
+        }
+        
+        function addLog(text) {
+            const terminal = document.getElementById('terminal');
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.className = 'log-entry';
+            logEntry.innerHTML = `<span class="log-timestamp">[${timestamp}]</span>${escapeHtml(text)}`;
+            terminal.appendChild(logEntry);
+            terminal.scrollTop = terminal.scrollHeight;
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        window.startLogging = async function() {
+            if (!device) {
+                showStatus('请先连接设备', 'error');
+                return;
+            }
+            
+            if (isLogging) {
+                return;
+            }
+            
+            try {
+                // 断开ESPLoader以释放串口
+                if (transport) {
+                    await transport.disconnect();
+                }
+                
+                const baudRate = parseInt(document.getElementById('baudRate').value);
+                
+                // 重新打开串口用于日志监控
+                await device.open({ baudRate: baudRate });
+                
+                isLogging = true;
+                document.getElementById('startLogBtn').disabled = true;
+                document.getElementById('stopLogBtn').disabled = false;
+                document.getElementById('flashBtn').disabled = true;
+                document.getElementById('eraseBtn').disabled = true;
+                
+                addLog('=== 开始监控串口日志 ===');
+                
+                const decoder = new TextDecoderStream();
+                const readableStreamClosed = device.readable.pipeTo(decoder.writable);
+                logReader = decoder.readable.getReader();
+                
+                // 读取数据
+                while (isLogging) {
+                    try {
+                        const { value, done } = await logReader.read();
+                        if (done) {
+                            break;
+                        }
+                        if (value) {
+                            addLog(value);
+                        }
+                    } catch (error) {
+                        if (isLogging) {
+                            console.error('读取错误:', error);
+                            break;
+                        }
+                    }
+                }
+                
+            } catch (error) {
+                showStatus('启动日志监控失败: ' + error.message, 'error');
+                console.error('日志错误:', error);
+                isLogging = false;
+                document.getElementById('startLogBtn').disabled = false;
+                document.getElementById('stopLogBtn').disabled = true;
+                document.getElementById('flashBtn').disabled = false;
+                document.getElementById('eraseBtn').disabled = false;
+            }
+        }
+        
+        window.stopLogging = async function() {
+            if (!isLogging) {
+                return;
+            }
+            
+            isLogging = false;
+            
+            try {
+                if (logReader) {
+                    await logReader.cancel();
+                    logReader.releaseLock();
+                    logReader = null;
+                }
+                
+                // 关闭串口
+                if (device && device.readable) {
+                    await device.close();
+                }
+                
+                addLog('=== 停止监控串口日志 ===');
+                
+                // 重新初始化ESPLoader
+                transport = new Transport(device, true);
+                esploader = new ESPLoader({
+                    transport: transport,
+                    baudrate: 115200,
+                    terminal: term
+                });
+                
+                chip = await esploader.main();
+                term.writeLine('ESPLoader 重新初始化完成');
+                
+            } catch (error) {
+                console.error('停止日志错误:', error);
+            } finally {
+                document.getElementById('startLogBtn').disabled = false;
+                document.getElementById('stopLogBtn').disabled = true;
+                document.getElementById('flashBtn').disabled = false;
+                document.getElementById('eraseBtn').disabled = false;
+            }
+        }
+        
+        window.clearLog = function() {
+            document.getElementById('terminal').innerHTML = '';
+        }
+    </script>
+</body>
+</html>
