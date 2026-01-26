@@ -52,7 +52,9 @@ const {siteInfo} =useGlobal()
         {/* 封面图 */}
         {showPageCover && (
           <SmartLink href={post?.href} passHref legacyBehavior>
-            <div className='flex-grow mb-3 w-full duration-200 cursor-pointer transform overflow-hidden'>
+            <div
+              style={{ aspectRatio: '1 / 1' }}
+              className='flex-grow mb-3 w-full duration-200 cursor-pointer transform overflow-hidden'>
               <LazyImage
                 src={post?.pageCoverThumbnail}
                 alt={post?.title || siteConfig('TITLE')}
