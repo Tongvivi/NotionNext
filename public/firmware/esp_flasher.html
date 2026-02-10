@@ -302,30 +302,16 @@
             
             <!-- 串口日志部分 -->
             <div class="section">
-                <h2>📊 ESP32串口日志</h2>
-                
-                <div class="form-group">
-                    <label>波特率：</label>
-                    <select id="baudRate">
-                        <option value="9600">9600</option>
-                        <option value="115200" selected>115200</option>
-                        <option value="230400">230400</option>
-                        <option value="460800">460800</option>
-                        <option value="921600">921600</option>
-                    </select>
+                <h2>📊 输出与调试</h2>
+                <div class="status info" style="display: block; margin-top: 0;">
+                    实时串口日志已拆分到独立页面，避免与刷机流程抢占串口。
                 </div>
-                
                 <div class="btn-group">
-                    <button class="btn-secondary" id="startLogBtn" onclick="startLogging()" disabled>
-                        ▶️ 开始监控日志
+                    <button class="btn-secondary" onclick="window.open('/firmware/esp_serial_log.html', '_blank')">
+                        🔍 打开独立串口日志页
                     </button>
-                    
-                    <button class="btn-secondary" id="stopLogBtn" onclick="stopLogging()" disabled>
-                        ⏸️ 停止监控
-                    </button>
-                    
                     <button class="btn-secondary" onclick="clearLog()">
-                        🗑️ 清空日志
+                        🗑️ 清空输出
                     </button>
                 </div>
                 <div id="terminal"></div>
@@ -471,13 +457,20 @@
             statusDiv.style.display = 'block';
         }
 
+        function setDisabled(id, disabled) {
+            const element = document.getElementById(id);
+            if (element) {
+                element.disabled = disabled;
+            }
+        }
+
         function updateUiDisconnectedState() {
-            document.getElementById('connectBtn').disabled = false;
-            document.getElementById('flashBtn').disabled = true;
-            document.getElementById('eraseBtn').disabled = true;
-            document.getElementById('disconnectBtn').disabled = true;
-            document.getElementById('startLogBtn').disabled = true;
-            document.getElementById('stopLogBtn').disabled = true;
+            setDisabled('connectBtn', false);
+            setDisabled('flashBtn', true);
+            setDisabled('eraseBtn', true);
+            setDisabled('disconnectBtn', true);
+            setDisabled('startLogBtn', true);
+            setDisabled('stopLogBtn', true);
         }
 
         function isCurrentDevicePort(port) {
@@ -595,11 +588,11 @@
                 showStatus(`✅ 连接成功！芯片型号: ${chip}`, 'success');
                 
                 // 更新按钮状态
-                document.getElementById('connectBtn').disabled = true;
-                document.getElementById('flashBtn').disabled = false;
-                document.getElementById('eraseBtn').disabled = false;
-                document.getElementById('disconnectBtn').disabled = false;
-                document.getElementById('startLogBtn').disabled = false;
+                setDisabled('connectBtn', true);
+                setDisabled('flashBtn', false);
+                setDisabled('eraseBtn', false);
+                setDisabled('disconnectBtn', false);
+                setDisabled('startLogBtn', false);
                 
             } catch (error) {
                 isConnected = false;
@@ -752,7 +745,7 @@
                 document.getElementById('flashBtn').disabled = true;
                 document.getElementById('eraseBtn').disabled = true;
                 document.getElementById('disconnectBtn').disabled = true;
-                document.getElementById('startLogBtn').disabled = true;
+                setDisabled('startLogBtn', true);
                 document.getElementById('progressBar').style.display = 'none';
                 
             } catch (error) {
@@ -864,11 +857,11 @@
                 await resetDeviceToRunMode();
                 
                 isLogging = true;
-                document.getElementById('connectBtn').disabled = true;
-                document.getElementById('startLogBtn').disabled = true;
-                document.getElementById('stopLogBtn').disabled = false;
-                document.getElementById('flashBtn').disabled = true;
-                document.getElementById('eraseBtn').disabled = true;
+                setDisabled('connectBtn', true);
+                setDisabled('startLogBtn', true);
+                setDisabled('stopLogBtn', false);
+                setDisabled('flashBtn', true);
+                setDisabled('eraseBtn', true);
                 
                 addLog('=== 开始监控串口日志 ===');
                 
