@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 串口日志监控</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #ffffff 0%, #eeeeee 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            background: #fff;
+            border-radius: 14px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #2f8f83 0%, #2c6ea3 100%);
+            color: #fff;
+            padding: 24px 28px;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 6px;
+        }
+
+        .header p {
+            opacity: 0.95;
+            font-size: 14px;
+        }
+
+        .content {
+            padding: 24px 28px 28px;
+            display: grid;
+            gap: 14px;
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: 220px 1fr;
+            gap: 10px;
+            align-items: center;
+        }
+
+        label {
+            color: #495057;
+            font-weight: 600;
+        }
+
+        select {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #d8dde3;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+
+        .btn-group {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            font-size: 14px;
+            font-weight: 600;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .btn-primary { background: #2f8f83; color: #fff; }
+        .btn-primary:hover:not(:disabled) { background: #26776d; }
+        .btn-secondary { background: #6c757d; color: #fff; }
+        .btn-secondary:hover:not(:disabled) { background: #5b636a; }
+        .btn-danger { background: #dc3545; color: #fff; }
+        .btn-danger:hover:not(:disabled) { background: #c02b3a; }
+
+        .status {
+            padding: 12px;
+            border-radius: 8px;
+            font-weight: 500;
+        }
+
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        #terminal {
+            background: #1e1e1e;
+            color: #d8ffd8;
+            border-radius: 8px;
+            padding: 14px;
+            min-height: 380px;
+            max-height: 62vh;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-family: Consolas, 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.45;
+        }
+
+        .toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .toolbar-left {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        @media (max-width: 780px) {
+            .controls {
+                grid-template-columns: 1fr;
+            }
+            .btn-group {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 ESP32 串口日志监控</h1>
+            <p>独立页面，仅处理串口日志，避免与刷机流程冲突</p>
+        </div>
+
+        <div class="content">
+            <div class="controls">
+                <label for="baudRate">波特率</label>
+                <select id="baudRate">
+                    <option value="9600">9600</option>
+                    <option value="115200" selected>115200</option>
+                    <option value="230400">230400</option>
+                    <option value="460800">460800</option>
+                    <option value="921600">921600</option>
+                </select>
+            </div>
+
+            <div class="btn-group">
+                <button class="btn-primary" id="connectBtn">🔌 连接设备</button>
+                <button class="btn-primary" id="startBtn" disabled>▶️ 开始监控</button>
+                <button class="btn-secondary" id="stopBtn" disabled>⏸️ 停止监控</button>
+                <button class="btn-danger" id="disconnectBtn" disabled>🔌 断开设备</button>
+                <button class="btn-secondary" id="clearBtn">🗑️ 清空日志</button>
+                <button class="btn-secondary" id="backBtn">↩️ 返回刷机页</button>
+            </div>
+
+            <div id="status" class="status info">等待连接设备</div>
+
+            <div class="toolbar">
+                <div class="toolbar-left">
+                    <input type="checkbox" id="autoScroll" checked>
+                    <label for="autoScroll">自动滚动到底部</label>
+                </div>
+            </div>
+
+            <div id="terminal"></div>
+        </div>
+    </div>
+
+    <script>
+        let port = null;
+        let reader = null;
+        let streamClosed = null;
+        let isMonitoring = false;
+        let stopRequested = false;
+        let serialEventsRegistered = false;
+
+        const terminal = document.getElementById('terminal');
+        const statusEl = document.getElementById('status');
+
+        const connectBtn = document.getElementById('connectBtn');
+        const disconnectBtn = document.getElementById('disconnectBtn');
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const backBtn = document.getElementById('backBtn');
+        const baudRateEl = document.getElementById('baudRate');
+        const autoScrollEl = document.getElementById('autoScroll');
+
+        function setStatus(message, type = 'info') {
+            statusEl.className = `status ${type}`;
+            statusEl.textContent = message;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function writeLog(text) {
+            const ts = new Date().toLocaleTimeString();
+            terminal.innerHTML += `<div>[${ts}] ${escapeHtml(text)}</div>`;
+            if (autoScrollEl.checked) {
+                terminal.scrollTop = terminal.scrollHeight;
+            }
+        }
+
+        function setButtons() {
+            const connected = !!port;
+            connectBtn.disabled = connected;
+            disconnectBtn.disabled = !connected;
+            startBtn.disabled = !connected || isMonitoring;
+            stopBtn.disabled = !connected || !isMonitoring;
+        }
+
+        function isSamePort(targetPort) {
+            if (!port || !targetPort) return false;
+            if (port === targetPort) return true;
+            if (typeof port.getInfo !== 'function' || typeof targetPort.getInfo !== 'function') return false;
+            const a = port.getInfo() || {};
+            const b = targetPort.getInfo() || {};
+            return a.usbVendorId === b.usbVendorId && a.usbProductId === b.usbProductId;
+        }
+
+        async function cleanupReader() {
+            if (reader) {
+                try {
+                    await reader.cancel();
+                } catch (error) {
+                    console.warn('Cancel reader failed:', error);
+                }
+                try {
+                    reader.releaseLock();
+                } catch (error) {
+                    console.warn('Release reader lock failed:', error);
+                }
+                reader = null;
+            }
+
+            if (streamClosed) {
+                try {
+                    await streamClosed;
+                } catch (error) {
+                    console.warn('Stream close failed:', error);
+                }
+                streamClosed = null;
+            }
+        }
+
+        async function stopMonitoring(silent = false) {
+            if (!isMonitoring && !reader) {
+                return;
+            }
+
+            stopRequested = true;
+            isMonitoring = false;
+            await cleanupReader();
+
+            if (!silent) {
+                writeLog('=== 已停止监控串口日志 ===');
+                setStatus('已停止监控', 'info');
+            }
+            setButtons();
+        }
+
+        async function handlePortLost() {
+            const wasMonitoring = isMonitoring;
+            isMonitoring = false;
+
+            await cleanupReader();
+            try {
+                if (port && port.readable) {
+                    await port.close();
+                }
+            } catch (error) {
+                console.warn('Close lost port failed:', error);
+            }
+
+            port = null;
+            setButtons();
+            writeLog(wasMonitoring ? '=== 串口断开，监控结束 ===' : '检测到串口已断开');
+            setStatus('串口已断开，请重新连接设备', 'error');
+        }
+
+        function registerSerialEvents() {
+            if (serialEventsRegistered || !navigator.serial) return;
+
+            navigator.serial.addEventListener('disconnect', async (event) => {
+                if (!isSamePort(event.target)) return;
+                await handlePortLost();
+            });
+
+            navigator.serial.addEventListener('connect', (event) => {
+                const info = typeof event.target?.getInfo === 'function' ? event.target.getInfo() : {};
+                const vendor = info.usbVendorId ? `0x${info.usbVendorId.toString(16)}` : 'unknown';
+                const product = info.usbProductId ? `0x${info.usbProductId.toString(16)}` : 'unknown';
+                writeLog(`检测到设备接入: ${vendor}/${product}`);
+            });
+
+            serialEventsRegistered = true;
+        }
+
+        async function connectDevice() {
+            if (!navigator.serial) {
+                setStatus('当前浏览器不支持 Web Serial，请使用 Chrome/Edge/Opera', 'error');
+                return;
+            }
+
+            registerSerialEvents();
+            try {
+                const known = await navigator.serial.getPorts();
+                if (known.length === 1) {
+                    port = known[0];
+                } else {
+                    port = await navigator.serial.requestPort();
+                }
+
+                const baudRate = parseInt(baudRateEl.value, 10);
+                if (!port.readable) {
+                    await port.open({ baudRate });
+                }
+                setButtons();
+                setStatus('设备连接成功，可开始监控日志', 'success');
+                writeLog(`串口连接成功，波特率 ${baudRate}`);
+            } catch (error) {
+                port = null;
+                setButtons();
+                setStatus(`连接失败: ${error.message}`, 'error');
+                writeLog(`连接失败: ${error.message}`);
+            }
+        }
+
+        async function disconnectDevice() {
+            try {
+                await stopMonitoring(true);
+                if (port && port.readable) {
+                    await port.close();
+                }
+                if (port) {
+                    writeLog('串口已断开');
+                }
+            } catch (error) {
+                writeLog(`断开失败: ${error.message}`);
+            } finally {
+                port = null;
+                isMonitoring = false;
+                setButtons();
+                setStatus('设备已断开', 'info');
+            }
+        }
+
+        async function startMonitoring() {
+            if (!port) {
+                setStatus('请先连接设备', 'error');
+                return;
+            }
+            if (isMonitoring) return;
+
+            try {
+                stopRequested = false;
+                if (!port.readable) {
+                    const baudRate = parseInt(baudRateEl.value, 10);
+                    await port.open({ baudRate });
+                }
+
+                isMonitoring = true;
+                setButtons();
+                setStatus('正在监控串口日志...', 'success');
+                writeLog('=== 开始监控串口日志 ===');
+
+                const decoder = new TextDecoderStream();
+                streamClosed = port.readable.pipeTo(decoder.writable).catch(() => {});
+                reader = decoder.readable.getReader();
+
+                while (isMonitoring) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+                    if (value) {
+                        terminal.innerHTML += `<div>${escapeHtml(value)}</div>`;
+                        if (autoScrollEl.checked) {
+                            terminal.scrollTop = terminal.scrollHeight;
+                        }
+                    }
+                }
+            } catch (error) {
+                if (!stopRequested) {
+                    setStatus(`监控失败: ${error.message}`, 'error');
+                    writeLog(`监控失败: ${error.message}`);
+                }
+            } finally {
+                if (isMonitoring) {
+                    // 意外中断
+                    isMonitoring = false;
+                    await cleanupReader();
+                    writeLog('=== 日志监控已中断 ===');
+                    setStatus('日志监控中断，请重试', 'error');
+                }
+                stopRequested = false;
+                setButtons();
+            }
+        }
+
+        function clearLogs() {
+            terminal.innerHTML = '';
+        }
+
+        connectBtn.addEventListener('click', connectDevice);
+        disconnectBtn.addEventListener('click', disconnectDevice);
+        startBtn.addEventListener('click', startMonitoring);
+        stopBtn.addEventListener('click', () => stopMonitoring(false));
+        clearBtn.addEventListener('click', clearLogs);
+        backBtn.addEventListener('click', () => { window.location.href = '/firmware/esp_flasher.html'; });
+
+        if (navigator.serial) {
+            registerSerialEvents();
+            navigator.serial.getPorts().then((ports) => {
+                if (ports.length > 0) {
+                    setStatus(`检测到 ${ports.length} 个已授权串口，可直接连接`, 'info');
+                }
+            }).catch(() => {});
+        } else {
+            setStatus('当前浏览器不支持 Web Serial，请使用 Chrome/Edge/Opera', 'error');
+            connectBtn.disabled = true;
+            startBtn.disabled = true;
+            stopBtn.disabled = true;
+            disconnectBtn.disabled = true;
+        }
+    </script>
+</body>
+</html>
