@@ -1,0 +1,30 @@
+{
+  "generatedAt": "2026-02-10T02:07:00.081Z",
+  "items": [
+    {
+      "name": "AirM2M-E029A01_Stockv-7-partial-refresh.bin",
+      "label": "AirM2M-E029A01_Stockv-7-partial-refresh",
+      "url": "/firmware/bin/AirM2M-E029A01_Stockv-7-partial-refresh.bin"
+    },
+    {
+      "name": "AirM2M-Z96-Poe-V20260103.bin",
+      "label": "AirM2M-Z96-Poe-V20260103",
+      "url": "/firmware/bin/AirM2M-Z96-Poe-V20260103.bin"
+    },
+    {
+      "name": "AirM2M-Z96-Stock-V20260112.bin",
+      "label": "AirM2M-Z96-Stock-V20260112",
+      "url": "/firmware/bin/AirM2M-Z96-Stock-V20260112.bin"
+    },
+    {
+      "name": "ESP32C3supermini-robot-arm 20260210.bin",
+      "label": "ESP32C3supermini-robot-arm 20260210",
+      "url": "/firmware/bin/ESP32C3supermini-robot-arm%2020260210.bin"
+    },
+    {
+      "name": "ESP32C3supermini-robot-arm-20260117.bin",
+      "label": "ESP32C3supermini-robot-arm-20260117",
+      "url": "/firmware/bin/ESP32C3supermini-robot-arm-20260117.bin"
+    }
+  ]
+}

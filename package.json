@@ -16,6 +16,10 @@
     "url": "http://tangly1024.com"
   },
   "scripts": {
+    "firmware:list": "node scripts/generate-firmware-list.js",
+    "predev": "npm run firmware:list",
+    "prebuild": "npm run firmware:list",
+    "preexport": "npm run firmware:list",
     "dev": "next dev",
     "build": "cross-env BUILD_MODE=true next build",
     "start": "next start",
