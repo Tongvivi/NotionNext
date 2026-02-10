@@ -344,6 +344,8 @@
         let isConnected = false;
         let isLogging = false;
         let logReader = null;
+        let logStreamClosed = null;
+        let serialEventsRegistered = false;
         
         // Terminal 对象
         const term = {
@@ -468,6 +470,81 @@
             statusDiv.textContent = message;
             statusDiv.style.display = 'block';
         }
+
+        function updateUiDisconnectedState() {
+            document.getElementById('connectBtn').disabled = false;
+            document.getElementById('flashBtn').disabled = true;
+            document.getElementById('eraseBtn').disabled = true;
+            document.getElementById('disconnectBtn').disabled = true;
+            document.getElementById('startLogBtn').disabled = true;
+            document.getElementById('stopLogBtn').disabled = true;
+        }
+
+        function isCurrentDevicePort(port) {
+            if (!device || !port) return false;
+            if (device === port) return true;
+            if (typeof device.getInfo !== 'function' || typeof port.getInfo !== 'function') {
+                return false;
+            }
+
+            const a = device.getInfo() || {};
+            const b = port.getInfo() || {};
+            return a.usbVendorId === b.usbVendorId && a.usbProductId === b.usbProductId;
+        }
+
+        async function handleCurrentPortDisconnected() {
+            const wasLogging = isLogging;
+            isLogging = false;
+
+            await cleanupLoggingResources();
+
+            transport = null;
+            esploader = null;
+            chip = null;
+            isConnected = false;
+            device = null;
+
+            updateUiDisconnectedState();
+            if (wasLogging) {
+                addLog('=== 串口已断开，日志监控结束 ===');
+            } else {
+                term.writeLine('检测到串口断开');
+            }
+            showStatus('串口连接已断开，请重新点击“连接设备”', 'error');
+        }
+
+        function registerSerialEventHandlers() {
+            if (serialEventsRegistered || !navigator.serial) {
+                return;
+            }
+
+            navigator.serial.addEventListener('disconnect', async (event) => {
+                try {
+                    if (!isCurrentDevicePort(event.target)) {
+                        return;
+                    }
+                    await handleCurrentPortDisconnected();
+                } catch (error) {
+                    console.error('处理串口断开事件失败:', error);
+                }
+            });
+
+            navigator.serial.addEventListener('connect', (event) => {
+                try {
+                    const info = typeof event.target?.getInfo === 'function' ? event.target.getInfo() : {};
+                    const vendor = info.usbVendorId ? `0x${info.usbVendorId.toString(16)}` : '未知VID';
+                    const product = info.usbProductId ? `0x${info.usbProductId.toString(16)}` : '未知PID';
+                    term.writeLine(`检测到串口设备接入: ${vendor}/${product}`);
+                    if (!device && !isConnected && !isLogging) {
+                        showStatus('检测到可用串口，请点击“连接设备”', 'info');
+                    }
+                } catch (error) {
+                    console.error('处理串口接入事件失败:', error);
+                }
+            });
+
+            serialEventsRegistered = true;
+        }
         
         function updateProgress(percent) {
             const progressBar = document.getElementById('progressBar');
@@ -483,6 +560,8 @@
                     showStatus('您的浏览器不支持Web Serial API，请使用Chrome、Edge或Opera浏览器', 'error');
                     return;
                 }
+
+                registerSerialEventHandlers();
                 
                 if (isConnected) {
                     showStatus('设备已连接', 'info');
@@ -683,19 +762,61 @@
         }
         
         function addLog(text) {
-            const terminal = document.getElementById('terminal');
             const timestamp = new Date().toLocaleTimeString();
-            const logEntry = document.createElement('div');
-            logEntry.className = 'log-entry';
-            logEntry.innerHTML = `<span class="log-timestamp">[${timestamp}]</span>${escapeHtml(text)}`;
-            terminal.appendChild(logEntry);
-            terminal.scrollTop = terminal.scrollHeight;
+            term.writeLine(`[${timestamp}] ${text}`);
         }
-        
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
+
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        async function resetDeviceToRunMode() {
+            if (!device || typeof device.setSignals !== 'function') {
+                return;
+            }
+
+            try {
+                // 触发一次 EN 复位，让芯片从 bootloader/stub 回到用户固件运行态
+                await device.setSignals({ dataTerminalReady: false, requestToSend: true });
+                await sleep(120);
+                await device.setSignals({ dataTerminalReady: false, requestToSend: false });
+                await sleep(240);
+            } catch (error) {
+                console.warn('切换运行模式失败:', error);
+            }
+        }
+
+        async function cleanupLoggingResources() {
+            if (logReader) {
+                try {
+                    await logReader.cancel();
+                } catch (error) {
+                    console.warn('取消日志读取失败:', error);
+                }
+                try {
+                    logReader.releaseLock();
+                } catch (error) {
+                    console.warn('释放日志读取锁失败:', error);
+                }
+                logReader = null;
+            }
+
+            if (logStreamClosed) {
+                try {
+                    await logStreamClosed;
+                } catch (error) {
+                    console.warn('日志流关闭时异常:', error);
+                }
+                logStreamClosed = null;
+            }
+
+            if (device && device.readable) {
+                try {
+                    await device.close();
+                } catch (error) {
+                    console.warn('关闭日志串口失败:', error);
+                }
+            }
         }
         
         window.startLogging = async function() {
@@ -709,17 +830,41 @@
             }
             
             try {
-                // 断开ESPLoader以释放串口
+                showStatus('正在切换到日志模式...', 'info');
+
+                // 先尝试让芯片退出 stub，回到固件运行态
+                if (esploader && typeof esploader.hardReset === 'function') {
+                    try {
+                        await esploader.hardReset();
+                        await sleep(300);
+                    } catch (error) {
+                        console.warn('硬复位失败，继续尝试直接读串口日志:', error);
+                    }
+                }
+
+                // 断开 ESPLoader 以释放串口
                 if (transport) {
                     await transport.disconnect();
+                    await transport.waitForUnlock(1500);
+                    transport = null;
+                    esploader = null;
+                    chip = null;
+                    isConnected = false;
                 }
                 
-                const baudRate = parseInt(document.getElementById('baudRate').value);
+                const baudRate = parseInt(document.getElementById('baudRate').value, 10);
+
+                if (device.readable) {
+                    await device.close();
+                    await sleep(80);
+                }
                 
                 // 重新打开串口用于日志监控
                 await device.open({ baudRate: baudRate });
+                await resetDeviceToRunMode();
                 
                 isLogging = true;
+                document.getElementById('connectBtn').disabled = true;
                 document.getElementById('startLogBtn').disabled = true;
                 document.getElementById('stopLogBtn').disabled = false;
                 document.getElementById('flashBtn').disabled = true;
@@ -728,7 +873,7 @@
                 addLog('=== 开始监控串口日志 ===');
                 
                 const decoder = new TextDecoderStream();
-                const readableStreamClosed = device.readable.pipeTo(decoder.writable);
+                logStreamClosed = device.readable.pipeTo(decoder.writable).catch(() => {});
                 logReader = decoder.readable.getReader();
                 
                 // 读取数据
@@ -753,10 +898,17 @@
                 showStatus('启动日志监控失败: ' + error.message, 'error');
                 console.error('日志错误:', error);
                 isLogging = false;
-                document.getElementById('startLogBtn').disabled = false;
-                document.getElementById('stopLogBtn').disabled = true;
-                document.getElementById('flashBtn').disabled = false;
-                document.getElementById('eraseBtn').disabled = false;
+                await cleanupLoggingResources();
+                updateUiDisconnectedState();
+            } finally {
+                // 非手动 stop 的异常退出路径
+                if (isLogging) {
+                    isLogging = false;
+                    await cleanupLoggingResources();
+                    addLog('=== 日志监控已结束（串口中断） ===');
+                    showStatus('日志监控已中断，请重新开始或重新连接设备', 'error');
+                    updateUiDisconnectedState();
+                }
             }
         }
         
@@ -768,42 +920,29 @@
             isLogging = false;
             
             try {
-                if (logReader) {
-                    await logReader.cancel();
-                    logReader.releaseLock();
-                    logReader = null;
-                }
-                
-                // 关闭串口
-                if (device && device.readable) {
-                    await device.close();
-                }
+                await cleanupLoggingResources();
                 
                 addLog('=== 停止监控串口日志 ===');
-                
-                // 重新初始化ESPLoader
-                transport = new Transport(device, true);
-                esploader = new ESPLoader({
-                    transport: transport,
-                    baudrate: 115200,
-                    terminal: term
-                });
-                
-                chip = await esploader.main();
-                term.writeLine('ESPLoader 重新初始化完成');
+                showStatus('已停止日志监控。若要继续刷机，请点击“连接设备”重新进入刷机模式', 'info');
                 
             } catch (error) {
                 console.error('停止日志错误:', error);
+                showStatus('停止日志监控失败: ' + error.message, 'error');
             } finally {
-                document.getElementById('startLogBtn').disabled = false;
-                document.getElementById('stopLogBtn').disabled = true;
-                document.getElementById('flashBtn').disabled = false;
-                document.getElementById('eraseBtn').disabled = false;
+                transport = null;
+                esploader = null;
+                chip = null;
+                isConnected = false;
+                updateUiDisconnectedState();
             }
         }
         
         window.clearLog = function() {
-            document.getElementById('terminal').innerHTML = '';
+            term.clean();
+        }
+
+        if (navigator.serial) {
+            registerSerialEventHandlers();
         }
 
         loadPresetFirmwares()
