@@ -268,13 +268,6 @@
                     <label>选择预设固件：</label>
                     <select id="presetFirmware">
                         <option value="">-- 选择固件 --</option>
-                        <option value="./firmware/ESP32C3-AirM2M-Z96-Poe-V20260103.bin">1号 ESP32C3 AirM2M ESP32C3-E029A01 2.9寸墨水屏 测试用固件</option>
-                        <option value="https://dev.gizfly.com/test2.bin">2号 ESP32C3 AirM2M ESP32C3-E029A01 2.9寸墨水屏 股票 固件</option>
-                        <option value="https://dev.gizfly.com/ESP32C3-AirM2M-ESP32C3-Z96-Stock-V20251231.bin">3号 ESP32C3 AirM2M 4.2寸墨水屏 股票 固件</option>
-                        <option value="https://dev.gizfly.com/ESP32C3-AirM2M-ESP32C3-Z96-Stock-V20260111.bin">4号 ESP32C3 AirM2M 4.2寸墨水屏 股票 固件</option>                        
-                        <option value="https://dev.gizfly.com/ESP32C3-AirM2M-Z96-Poe-V20260103.bin">9号 ESP32C3 AirM2M 4.2寸墨水屏 诗词 固件</option>
-                        <option value="https://gizfolo.com/firmware/robot-arm-20260117.bin">17号ESP32C3 机械臂固件 测试</option>
-                    
                     </select>
                 </div>
                 
@@ -390,6 +383,83 @@
             document.getElementById('uploadGroup').style.display = source === 'upload' ? 'block' : 'none';
             document.getElementById('urlGroup').style.display = source === 'url' ? 'block' : 'none';
             document.getElementById('presetGroup').style.display = source === 'preset' ? 'block' : 'none';
+        }
+
+        function updatePresetOptions(items) {
+            const presetSelect = document.getElementById('presetFirmware')
+            presetSelect.innerHTML = '<option value="">-- 选择固件 --</option>'
+
+            items.forEach((item) => {
+                const option = document.createElement('option')
+                option.value = item.url
+                option.textContent = item.label || item.name || item.url
+                presetSelect.appendChild(option)
+            })
+        }
+
+        function extractBinFilesFromDirectoryListing(html) {
+            const regex = /href\s*=\s*["']([^"']+\.bin)["']/gi
+            const fileMap = new Map()
+            let match
+
+            while ((match = regex.exec(html)) !== null) {
+                const href = match[1]
+                const fileName = decodeURIComponent(href.split('/').pop())
+                if (!fileName) continue
+                if (!fileName.toLowerCase().endsWith('.bin')) continue
+
+                fileMap.set(fileName, {
+                    name: fileName,
+                    label: fileName.replace(/\.bin$/i, ''),
+                    url: `/firmware/bin/${encodeURIComponent(fileName)}`
+                })
+            }
+
+            return Array.from(fileMap.values())
+        }
+
+        async function loadPresetFirmwares() {
+            const presetSelect = document.getElementById('presetFirmware')
+            presetSelect.disabled = true
+
+            try {
+                const response = await fetch('/firmware/firmware-list.json', { cache: 'no-store' })
+                if (!response.ok) {
+                    throw new Error('firmware-list.json 不可用')
+                }
+
+                const data = await response.json()
+                const items = Array.isArray(data.items) ? data.items : []
+                updatePresetOptions(items)
+
+                if (items.length === 0) {
+                    showStatus('未找到可用的本地固件，请检查 /public/firmware/bin 目录', 'info')
+                } else {
+                    showStatus(`已自动加载 ${items.length} 个本地固件`, 'success')
+                }
+            } catch (jsonError) {
+                // 兼容静态服务器目录索引
+                try {
+                    const response = await fetch('/firmware/bin/')
+                    if (!response.ok) {
+                        throw new Error('目录索引不可用')
+                    }
+
+                    const html = await response.text()
+                    const items = extractBinFilesFromDirectoryListing(html)
+                    updatePresetOptions(items)
+
+                    if (items.length === 0) {
+                        throw new Error('目录中没有bin固件')
+                    }
+                    showStatus(`已自动加载 ${items.length} 个本地固件`, 'success')
+                } catch (fallbackError) {
+                    console.error('加载固件列表失败:', jsonError, fallbackError)
+                    showStatus('自动加载固件失败，请改用“本地上传”', 'error')
+                }
+            } finally {
+                presetSelect.disabled = false
+            }
         }
         
         function showStatus(message, type = 'info') {
@@ -735,6 +805,8 @@
         window.clearLog = function() {
             document.getElementById('terminal').innerHTML = '';
         }
+
+        loadPresetFirmwares()
     </script>
 </body>
 </html>
