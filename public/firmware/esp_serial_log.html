@@ -71,7 +71,7 @@
 
         .btn-group {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
+            grid-template-columns: repeat(4, 1fr);
             gap: 10px;
         }
 
@@ -181,8 +181,6 @@
 
             <div class="btn-group">
                 <button class="btn-primary" id="connectBtn">🔌 连接设备</button>
-                <button class="btn-primary" id="startBtn" disabled>▶️ 开始监控</button>
-                <button class="btn-secondary" id="stopBtn" disabled>⏸️ 停止监控</button>
                 <button class="btn-danger" id="disconnectBtn" disabled>🔌 断开设备</button>
                 <button class="btn-secondary" id="clearBtn">🗑️ 清空日志</button>
                 <button class="btn-secondary" id="backBtn">↩️ 返回刷机页</button>
@@ -214,8 +212,6 @@
 
         const connectBtn = document.getElementById('connectBtn');
         const disconnectBtn = document.getElementById('disconnectBtn');
-        const startBtn = document.getElementById('startBtn');
-        const stopBtn = document.getElementById('stopBtn');
         const clearBtn = document.getElementById('clearBtn');
         const backBtn = document.getElementById('backBtn');
         const baudRateEl = document.getElementById('baudRate');
@@ -244,8 +240,6 @@
             const connected = !!port;
             connectBtn.disabled = connected;
             disconnectBtn.disabled = !connected;
-            startBtn.disabled = !connected || isMonitoring;
-            stopBtn.disabled = !connected || !isMonitoring;
         }
 
         function isSamePort(targetPort) {
@@ -343,20 +337,15 @@
 
             registerSerialEvents();
             try {
-                const known = await navigator.serial.getPorts();
-                if (known.length === 1) {
-                    port = known[0];
-                } else {
-                    port = await navigator.serial.requestPort();
-                }
+                port = await navigator.serial.requestPort();
 
                 const baudRate = parseInt(baudRateEl.value, 10);
                 if (!port.readable) {
                     await port.open({ baudRate });
                 }
                 setButtons();
-                setStatus('设备连接成功，可开始监控日志', 'success');
                 writeLog(`串口连接成功，波特率 ${baudRate}`);
+                await startMonitoring();
             } catch (error) {
                 port = null;
                 setButtons();
@@ -441,8 +430,6 @@
 
         connectBtn.addEventListener('click', connectDevice);
         disconnectBtn.addEventListener('click', disconnectDevice);
-        startBtn.addEventListener('click', startMonitoring);
-        stopBtn.addEventListener('click', () => stopMonitoring(false));
         clearBtn.addEventListener('click', clearLogs);
         backBtn.addEventListener('click', () => { window.location.href = '/firmware/esp_flasher.html'; });
 
@@ -450,14 +437,12 @@
             registerSerialEvents();
             navigator.serial.getPorts().then((ports) => {
                 if (ports.length > 0) {
-                    setStatus(`检测到 ${ports.length} 个已授权串口，可直接连接`, 'info');
+                    setStatus(`检测到 ${ports.length} 个已授权串口，点击连接设备后请选择要使用的端口`, 'info');
                 }
             }).catch(() => {});
         } else {
             setStatus('当前浏览器不支持 Web Serial，请使用 Chrome/Edge/Opera', 'error');
             connectBtn.disabled = true;
-            startBtn.disabled = true;
-            stopBtn.disabled = true;
             disconnectBtn.disabled = true;
         }
     </script>
