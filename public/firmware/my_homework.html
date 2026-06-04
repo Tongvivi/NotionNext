@@ -351,12 +351,8 @@
         }
 
         @media (max-width: 600px) {
-            
-            body{
-                padding: 0px;
-            }
             .container {
-                padding: 15px;
+                padding: 25px;
             }
 
             .header h1 {
@@ -390,7 +386,17 @@
 
         <form id="homeworkForm">
 		
-		   
+		<div class="homework-grid" style="grid-template-columns: repeat(2, 1fr);">
+				<div class="form-group">
+					<label for="topic">📡 设备SN码</label>
+					<input type="text" id="topic" value="453AB4" required>
+				</div>
+
+				<div class="form-group">
+					<label for="date">📅 日期</label>
+					<input type="date" id="date" required>
+				</div>
+			</div>
 
             <div class="homework-grid">
                 <div class="homework-item">
@@ -408,24 +414,8 @@
                     <textarea id="english" placeholder="请输入英语作业内容..." required></textarea>
                 </div>
             </div>
-            
-            <button type="submit" class="btn-primary" id="submitBtn">📤 发送作业</button>
-            
-             <div class="homework-grid" style="grid-template-columns: repeat(2, 1fr); margin: 25px 0 25px;">
-                 
-                 
-				<div class="form-group">
-					<label for="date">📅 日期</label>
-					<input type="date" id="date" required style="width: 90%;">
-				</div>
-				
-				<div class="form-group">
-					<label for="topic">📡 设备SN码</label>
-					<input type="text" id="topic" value="SN_453AB4" required>
-				</div>
 
-			</div>
-			
+            <button type="submit" class="btn-primary" id="submitBtn">📤 发送作业</button>
         </form>
 
         <div class="message" id="message"></div>
@@ -443,36 +433,64 @@
         let client;
         const broker = 'broker.emqx.io';
         const port = 8084;
-        const SN_STORAGE_KEY = 'mqtt_homework_sn';
+        const DEVICE_CODE_STORAGE_KEY = 'mqtt_homework_device_code';
 
-        // 从localStorage加载保存的SN码
-        function loadSavedSN() {
-            const savedSN = localStorage.getItem(SN_STORAGE_KEY);
+        function normalizeSN(sn) {
+            const value = (sn || '').trim().toUpperCase();
+            if (!value) {
+                return '';
+            }
+            return value;
+        }
+
+        function getSNFromUrl() {
+            const params = new URLSearchParams(window.location.search);
+            return params.get('sn') || params.get('SN') || params.get('device_sn') || params.get('deviceSN') || '';
+        }
+
+        // 优先从网址参数加载SN码，没有参数时再读取localStorage
+        function loadInitialSN() {
+            const urlSN = normalizeSN(getSNFromUrl());
+            if (urlSN) {
+                document.getElementById('topic').value = urlSN;
+                saveSN(urlSN);
+                addDebugLog(`已从网址加载SN码: ${urlSN}`, 'info');
+                return;
+            }
+
+            const savedSN = localStorage.getItem(DEVICE_CODE_STORAGE_KEY);
             if (savedSN) {
-                document.getElementById('topic').value = savedSN;
-                addDebugLog(`已加载保存的SN码: ${savedSN}`, 'info');
+                const normalizedSN = normalizeSN(savedSN);
+                document.getElementById('topic').value = normalizedSN;
+                addDebugLog(`已加载保存的SN码: ${normalizedSN}`, 'info');
             }
         }
 
         // 保存SN码到localStorage
         function saveSN(sn) {
-            localStorage.setItem(SN_STORAGE_KEY, sn);
-            addDebugLog(`SN码已保存: ${sn}`, 'info');
+            const normalizedSN = normalizeSN(sn);
+            if (!normalizedSN) {
+                return;
+            }
+            localStorage.setItem(DEVICE_CODE_STORAGE_KEY, normalizedSN);
+            addDebugLog(`SN码已保存: ${normalizedSN}`, 'info');
         }
 
         // 监听SN码输入框变化
         document.addEventListener('DOMContentLoaded', function() {
             const topicInput = document.getElementById('topic');
             topicInput.addEventListener('change', function() {
-                saveSN(this.value.trim());
+                const normalizedSN = normalizeSN(this.value);
+                this.value = normalizedSN;
+                saveSN(normalizedSN);
             });
         });
 
         // 设置默认日期为今天
         document.getElementById('date').valueAsDate = new Date();
 
-        // 页面加载时加载保存的SN码
-        loadSavedSN();
+        // 页面加载时加载网址参数或保存的SN码
+        loadInitialSN();
 
         // 初始状态
         updateStatus('connecting', '正在连接...');
@@ -506,7 +524,7 @@
             const time = new Date().toLocaleTimeString('zh-CN', { hour12: false });
             logEntry.innerHTML = `<span class="log-time">[${time}]</span>${message}`;
             
-            logDiv.prepend(logEntry);
+            logDiv.appendChild(logEntry);
             logDiv.scrollTop = logDiv.scrollHeight;
         }
 
@@ -630,14 +648,15 @@
                 return;
             }
 
-            let topic = document.getElementById('topic').value.trim();
+            let topic = normalizeSN(document.getElementById('topic').value);
             if (!topic) {
-                showMessage('请输入 MQTT 主题', 'error');
-                addDebugLog('❌ 发送失败: 主题不能为空', 'error');
+                showMessage('请输入设备SN码', 'error');
+                addDebugLog('❌ 发送失败: 设备SN码不能为空', 'error');
                 return;
             }
 
             // 保存SN码
+            document.getElementById('topic').value = topic;
             saveSN(topic);
 
             const dateValue = document.getElementById('date').value;
